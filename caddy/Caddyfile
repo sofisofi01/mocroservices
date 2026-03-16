@@ -1,0 +1,13 @@
+:80 {
+    route /api/auth/* {
+        uri strip_prefix /api
+        reverse_proxy auth:8000
+    }
+    
+    route /api/expenses/* {
+        uri strip_prefix /api
+        reverse_proxy expenses:8000
+    }
+    
+    reverse_proxy react:80
+}

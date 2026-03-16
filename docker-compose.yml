@@ -1,0 +1,134 @@
+services:
+  kafka:
+    image: bitnami/kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  auth:
+    build: ./auth
+    restart: unless-stopped
+    ports:
+      - "9001:8000"
+    environment:
+      - SECRET_KEY=$(SECRET_KEY)
+      - DATABASE_URL=postgresql://postgres:$(POSTGRES_PASSWORD)@auth_db:5432/authdb
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      auth_db:
+          condition: service_healthy
+      kafka:
+          condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/auth/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  auth_db:
+    image: postgres
+    restart: unless-stopped
+    volumes: 
+      - postgres_data:/var/lib/postgresql
+    environment:
+      - POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)
+      - POSTGRES_DB=authdb
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d authdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+
+  expenses:
+    build: ./expenses
+    restart: unless-stopped
+    ports:
+      - "9002:8000"
+    environment:
+      - SECRET_KEY=$(SECRET_KEY)
+      - DATABASE_URL=postgresql://postgres:$(POSTGRES_PASSWORD_EXPENSES)@expenses_db:5432/expensesdb
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      expenses_db:
+          condition: service_healthy
+      kafka:
+          condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  expenses_db:
+    image: postgres
+    restart: unless-stopped
+    volumes: 
+      - postgres_data_expenses:/var/lib/postgresql
+    environment:
+      - POSTGRES_PASSWORD=$(POSTGRES_PASSWORD_EXPENSES)
+      - POSTGRES_DB=expensesdb
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d expensesdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  event-processor:
+    build: ./event-processor
+    restart: unless-stopped
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  react:
+    build: ./react
+    restart: unless-stopped
+    depends_on:
+      auth:
+          condition: service_healthy
+      expenses:
+          condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  caddy:
+    build: ./caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      auth:
+          condition: service_healthy
+      expenses:
+          condition: service_healthy
+      react: 
+          condition: service_healthy
+
+volumes:
+  postgres_data:
+  postgres_data_expenses:

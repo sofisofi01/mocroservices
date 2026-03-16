@@ -1,0 +1,6 @@
+fastapi
+sqlalchemy
+pydantic
+python-jose
+psycopg2-binary
+kafka-python
