@@ -26,16 +26,18 @@ def register(user_data: UserRegister):
         hashed_password=CryptService.get_hashed_password(user_data.password[:72])
     )
     session.add(new_user)
-    session.commit()
-    session.refresh(new_user)
-    token = CryptService.create_token(user_data.login)
-    session.close()
+    session.flush() # Чтобы получить ID
     
-    KafkaService.send_event('user-events', {
+    db.add_to_outbox(session, 'user-events', {
         'event_type': 'user_registered',
         'login': user_data.login,
         'user_id': new_user.id
     })
+    
+    session.commit()
+    session.refresh(new_user)
+    token = CryptService.create_token(user_data.login)
+    session.close()
     
     return {"token": token}
 
@@ -47,15 +49,17 @@ def login(user_data: UserLogin):
     user = session.query(User).filter(User.login == login).first()
 
     if not user or not CryptService.verify_password(password, user.hashed_password):
+        session.close()
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = CryptService.create_token(user.login)
-    session.close()
-
-    KafkaService.send_event('user-events', {
+    db.add_to_outbox(session, 'user-events', {
         'event_type': 'user_logged_in',
         'login': user.login,
         'user_id': user.id
     })
+    
+    session.commit()
+    token = CryptService.create_token(user.login)
+    session.close()
 
     return {"token": token}

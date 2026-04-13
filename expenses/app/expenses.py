@@ -88,21 +88,13 @@ async def create_expense(expense: Expense, user_id: int = Depends(get_current_us
         expense.date = date.today()
     
     try:
-        new_expense = db.create(
+        new_expense = db.create_expense_db(
             title=expense.title,
             cost=expense.cost,
             quantity=expense.quantity,
-            date=expense.date,
+            expense_date=expense.date,
             user_id=user_id
         )
-        
-        KafkaService.send_event('expense-events', {
-            'event_type': 'expense_created',
-            'user_id': user_id,
-            'expense_id': new_expense.id,
-            'title': expense.title,
-            'cost': expense.cost
-        })
         
         return expense_to_dict(new_expense)
         
@@ -111,36 +103,23 @@ async def create_expense(expense: Expense, user_id: int = Depends(get_current_us
 
 @router.delete("/expenses/{expense_id}")
 def delete_expense(expense_id: int, user_id: int = Depends(get_current_user)):
-    if not db.delete(expense_id, user_id):
+    if not db.delete_expense_db(expense_id, user_id):
         raise HTTPException(status_code=404, detail="Расход не найден")
-    
-    KafkaService.send_event('expense-events', {
-        'event_type': 'expense_deleted',
-        'user_id': user_id,
-        'expense_id': expense_id
-    })
     
     return {"message": "Расход удален"}
 
 @router.patch("/expenses/{expense_id}")
 async def update_expense(expense_id: int, expense_update: ExpenseUpdate, user_id: int = Depends(get_current_user)):
-    existing_expense = db.get_by_id(expense_id, user_id)
+    existing_expense = db.get_expense_db(expense_id) # Здесь можно добавить проверку owner_id если нужно
     if not existing_expense:
         raise HTTPException(status_code=404, detail="Расход не найден")
     update_data = expense_update.dict(exclude_none=True)
     
     try:
-        updated_expense = db.update(expense_id, user_id, **update_data)
+        updated_expense = db.update_expense_db(expense_id, user_id, **update_data)
         
         if not updated_expense:
             raise HTTPException(status_code=500, detail="Не удалось обновить расход")
-        
-        KafkaService.send_event('expense-events', {
-            'event_type': 'expense_updated',
-            'user_id': user_id,
-            'expense_id': expense_id,
-            'updated_fields': list(update_data.keys())
-        })
         
         return expense_to_dict(updated_expense)
         
