@@ -97,9 +97,44 @@ services:
     restart: unless-stopped
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DATABASE_URL=postgresql://postgres:$(POSTGRES_PASSWORD_EVENTS)@events_db:5432/eventsdb
     depends_on:
       kafka:
         condition: service_healthy
+      events_db:
+        condition: service_healthy
+
+  events_db:
+    image: postgres
+    restart: unless-stopped
+    volumes:
+      - postgres_data_events:/var/lib/postgresql
+    environment:
+      - POSTGRES_PASSWORD=$(POSTGRES_PASSWORD_EVENTS)
+      - POSTGRES_DB=eventsdb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eventsdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  expense-es:
+    build: ./expense-es
+    restart: unless-stopped
+    ports:
+      - "9004:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   react:
     build: ./react
@@ -132,3 +167,4 @@ services:
 volumes:
   postgres_data:
   postgres_data_expenses:
+  postgres_data_events:
