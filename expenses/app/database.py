@@ -37,7 +37,7 @@ class Database:
         try:
             expense = ExpenseModel(title=title, cost=cost, quantity=quantity, date=expense_date, owner_id=user_id)
             db.add(expense)
-            db.flush() # Чтобы получить ID
+            db.flush()
             
             self._add_to_outbox(db, 'expense-events', {
                 'event_type': 'expense_created',

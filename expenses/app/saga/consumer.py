@@ -1,9 +1,19 @@
 import json
 import os
 import threading
+import struct
 from datetime import datetime
 from kafka import KafkaConsumer, KafkaProducer
 from saga.events import TOPIC, MONTH_CLOSE_REQUESTED, REPORT_CREATED, MONTH_CLOSE_FAILED
+from schema_registry import schema_client
+
+
+def decode_message(data):
+    """Декодирует сообщение с учетом Schema Registry Wire Protocol"""
+    if len(data) > 5 and data[0] == 0:
+        schema_id = struct.unpack(">I", data[1:5])[0]
+        return json.loads(data[5:].decode("utf-8"))
+    return json.loads(data.decode("utf-8"))
 
 
 def get_producer():
@@ -49,7 +59,7 @@ def run():
     consumer = KafkaConsumer(
         TOPIC,
         bootstrap_servers=bootstrap,
-        value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+        value_deserializer=decode_message,
         group_id="expenses-saga-group",
         auto_offset_reset="earliest",
     )

@@ -26,7 +26,7 @@ def register(user_data: UserRegister):
         hashed_password=CryptService.get_hashed_password(user_data.password[:72])
     )
     session.add(new_user)
-    session.flush() # Чтобы получить ID
+    session.flush()
     
     db.add_to_outbox(session, 'user-events', {
         'event_type': 'user_registered',

@@ -110,7 +110,7 @@ def delete_expense(expense_id: int, user_id: int = Depends(get_current_user)):
 
 @router.patch("/expenses/{expense_id}")
 async def update_expense(expense_id: int, expense_update: ExpenseUpdate, user_id: int = Depends(get_current_user)):
-    existing_expense = db.get_expense_db(expense_id) # Здесь можно добавить проверку owner_id если нужно
+    existing_expense = db.get_expense_db(expense_id)
     if not existing_expense:
         raise HTTPException(status_code=404, detail="Расход не найден")
     update_data = expense_update.dict(exclude_none=True)

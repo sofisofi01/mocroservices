@@ -7,10 +7,25 @@ from kafka import KafkaProducer
 from crypt import CryptService
 from saga.events import TOPIC, MONTH_CLOSE_REQUESTED
 from saga.consumer import saga_results
+from schema_registry import schema_client
 
 router = APIRouter(prefix="/saga", tags=["saga"])
-security = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
+SAGA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "event_type": {"type": "string"},
+        "saga_id": {"type": "string"},
+        "user_id": {"type": "integer"},
+        "year": {"type": "integer"},
+        "month": {"type": "integer"}
+    },
+    "required": ["event_type", "saga_id", "user_id", "year", "month"]
+}
+
+@router.on_event("startup")
+def register_saga_schema():
+    schema_client.register_schema(f"{TOPIC}-value", SAGA_SCHEMA)
 
 def get_current_user(token: str = Depends(security)) -> int:
     try:
@@ -35,14 +50,28 @@ def close_month(year: int, month: int, user_id: int = Depends(get_current_user))
         raise HTTPException(status_code=400, detail="Invalid month")
 
     saga_id = str(uuid.uuid4())
-    producer = get_producer()
-    producer.send(TOPIC, {
+    
+    schema_info = schema_client.get_latest_schema(f"{TOPIC}-value")
+    schema_id = schema_info.get("id") if schema_info else None
+
+    event_payload = {
         "event_type": MONTH_CLOSE_REQUESTED,
         "saga_id": saga_id,
         "user_id": user_id,
         "year": year,
         "month": month,
-    })
+    }
+
+    producer = get_producer()
+    
+    if schema_id:
+        import struct
+        header = struct.pack(">bI", 0, schema_id)
+        data = header + json.dumps(event_payload).encode("utf-8")
+        producer.send(TOPIC, data)
+    else:
+        producer.send(TOPIC, event_payload)
+        
     producer.flush()
 
     return {"saga_id": saga_id, "status": "started"}
