@@ -2,12 +2,19 @@ import json
 import os
 import threading
 from confluent_kafka import Consumer
+from confluent_kafka.schema_registry import SchemaRegistryClient
+from confluent_kafka.schema_registry.avro import AvroDeserializer
+from confluent_kafka.serialization import SerializationContext, MessageField
 from saga.events import TOPIC, REPORT_CREATED, MONTH_CLOSE_FAILED
 
 saga_results: dict = {}
 
 def run():
     bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
+    sr_url = os.getenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")
+
+    sr_client = SchemaRegistryClient({'url': sr_url})
+    avro_deserializer = AvroDeserializer(sr_client)
 
     conf = {
         'bootstrap.servers': bootstrap,
@@ -18,7 +25,7 @@ def run():
     consumer = Consumer(conf)
     consumer.subscribe([TOPIC])
 
-    print("Auth saga consumer started...")
+    print("Auth saga consumer started (Avro)...")
 
     try:
         while True:
@@ -30,11 +37,8 @@ def run():
                 continue
 
             try:
-                raw_value = msg.value().decode('utf-8')
-                event = json.loads(raw_value)
-                
-                if isinstance(event, str):
-                    event = json.loads(event)
+                ctx = SerializationContext(TOPIC, MessageField.VALUE)
+                event = avro_deserializer(msg.value(), ctx)
                 
                 if event is None or not isinstance(event, dict):
                     continue

@@ -5,16 +5,15 @@ from datetime import datetime
 from confluent_kafka import Consumer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.avro import AvroDeserializer
-from confluent_kafka.serialization import StringDeserializer
+from confluent_kafka.serialization import StringDeserializer, SerializationContext, MessageField
 from saga.events import TOPIC, MONTH_CLOSE_REQUESTED, REPORT_CREATED, MONTH_CLOSE_FAILED
 
 def get_avro_consumer(topic, group_id):
     sr_client = SchemaRegistryClient({'url': os.getenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")})
     avro_deserializer = AvroDeserializer(sr_client)
-    string_deserializer = StringDeserializer('utf_8')
 
     consumer_conf = {
-        'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),
+        'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"),
         'group.id': group_id,
         'auto.offset.reset': 'earliest'
     }
@@ -62,20 +61,14 @@ def create_report(user_id: int, year: int, month: int) -> dict:
 
 def run():
     try:
-        print("DEBUG: Starting saga consumer thread...", flush=True)
+        print("DEBUG: Starting saga consumer thread (Avro)...", flush=True)
         topic = TOPIC
-        bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
+        group_id = 'expenses-saga-group'
+        
+        consumer, avro_deserializer = get_avro_consumer(topic, group_id)
+        string_deserializer = StringDeserializer('utf_8')
 
-        conf = {
-            'bootstrap.servers': bootstrap,
-            'group.id': 'expenses-saga-group',
-            'auto.offset.reset': 'earliest'
-        }
-
-        consumer = Consumer(conf)
-        consumer.subscribe([topic])
-
-        print(f"Expenses saga consumer started (JSON) on topic {topic}...", flush=True)
+        print(f"Expenses saga consumer started (Avro) on topic {topic}...", flush=True)
 
         while True:
             msg = consumer.poll(1.0)
@@ -86,12 +79,9 @@ def run():
                 continue
 
             try:
-                raw_value = msg.value().decode('utf-8')
-                event = json.loads(raw_value)
-                
-                # Если Debezium прислал payload как строку внутри JSON, декодируем еще раз
-                if isinstance(event, str):
-                    event = json.loads(event)
+                # Десериализуем значение через Avro
+                ctx = SerializationContext(topic, MessageField.VALUE)
+                event = avro_deserializer(msg.value(), ctx)
                 
                 if event is None or not isinstance(event, dict):
                     continue
