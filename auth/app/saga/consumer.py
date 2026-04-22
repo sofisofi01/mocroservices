@@ -30,8 +30,15 @@ def run():
                 continue
 
             try:
-                # Простая десериализация JSON (без Avro для этого топика пока что)
-                event = json.loads(msg.value().decode('utf-8'))
+                raw_value = msg.value().decode('utf-8')
+                event = json.loads(raw_value)
+                
+                if isinstance(event, str):
+                    event = json.loads(event)
+                
+                if event is None or not isinstance(event, dict):
+                    continue
+
                 event_type = event.get("event_type")
                 saga_id = event.get("saga_id")
 
@@ -40,16 +47,16 @@ def run():
                         "status": "completed",
                         "report": event["report"],
                     }
-                    print(f"[SAGA {saga_id}] Month closed successfully.")
+                    print(f"[SAGA {saga_id}] Month closed successfully.", flush=True)
 
                 elif event_type == MONTH_CLOSE_FAILED:
                     saga_results[saga_id] = {
                         "status": "failed",
                         "reason": event["reason"],
                     }
-                    print(f"[SAGA {saga_id}] Month close failed.")
+                    print(f"[SAGA {saga_id}] Month close failed.", flush=True)
             except Exception as e:
-                print(f"Error processing message: {e}")
+                print(f"Error processing message: {e}", flush=True)
     finally:
         consumer.close()
 

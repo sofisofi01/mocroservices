@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import OAuth2PasswordRequestForm
 from http import HTTPStatus
 from models import UserRegister, TokenOut, UserLogin
 from database_models import User
@@ -28,11 +29,15 @@ def register(user_data: UserRegister):
     session.add(new_user)
     session.flush()
     
-    db.add_to_outbox(session, 'user-events', {
-        'event_type': 'user_registered',
-        'login': user_data.login,
-        'user_id': new_user.id
-    })
+    db.add_to_outbox(session, 
+        aggregate_id=str(new_user.id),
+        aggregate_type='user',
+        event_type='user_registered',
+        payload={
+            'login': user_data.login,
+            'user_id': new_user.id
+        }
+    )
     
     session.commit()
     session.refresh(new_user)
@@ -40,6 +45,19 @@ def register(user_data: UserRegister):
     session.close()
     
     return {"token": token}
+
+@router.post("/token")
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    session = db.SessionLocal()
+    user = session.query(User).filter(User.login == form_data.username).first()
+
+    if not user or not CryptService.verify_password(form_data.password, user.hashed_password):
+        session.close()
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = CryptService.create_token(user.login)
+    session.close()
+    return {"access_token": token, "token_type": "bearer"}
 
 @router.post("/login", response_model=TokenOut)
 def login(user_data: UserLogin):
@@ -52,11 +70,15 @@ def login(user_data: UserLogin):
         session.close()
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    db.add_to_outbox(session, 'user-events', {
-        'event_type': 'user_logged_in',
-        'login': user.login,
-        'user_id': user.id
-    })
+    db.add_to_outbox(session,
+        aggregate_id=str(user.id),
+        aggregate_type='user',
+        event_type='user_logged_in',
+        payload={
+            'login': user.login,
+            'user_id': user.id
+        }
+    )
     
     session.commit()
     token = CryptService.create_token(user.login)

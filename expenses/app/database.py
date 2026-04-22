@@ -152,4 +152,11 @@ class Database:
 
 
 
+    def get_all(self, user_id: int) -> List[ExpenseModel]:
+        db = self.SessionLocal()
+        try:
+            return db.query(ExpenseModel).filter(ExpenseModel.owner_id == user_id).all()
+        finally:
+            db.close()
+
 db = Database()
