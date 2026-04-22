@@ -1,6 +1,6 @@
 FROM python:alpine
 
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl gcc musl-dev librdkafka-dev
 
 WORKDIR /usr/src/app
 
