@@ -1,7 +1,7 @@
 {
   "type": "record",
   "name": "ExpenseCreated",
-  "namespace": "ru.kodik.expenses",
+  "namespace": "ru.expenses",
   "fields": [
     {
       "name": "event_type",
