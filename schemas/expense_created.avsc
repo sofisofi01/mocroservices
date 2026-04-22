@@ -1,0 +1,38 @@
+{
+  "type": "record",
+  "name": "ExpenseCreated",
+  "namespace": "ru.kodik.expenses",
+  "fields": [
+    {
+      "name": "event_type",
+      "type": "string",
+      "doc": "Тип события (например, expense_created)"
+    },
+    {
+      "name": "user_id",
+      "type": "int",
+      "doc": "ID пользователя, совершившего расход"
+    },
+    {
+      "name": "expense_id",
+      "type": "int",
+      "doc": "Уникальный ID записи расхода"
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "doc": "Название расхода"
+    },
+    {
+      "name": "cost",
+      "type": "float",
+      "doc": "Сумма расхода"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "logicalType": "timestamp-millis",
+      "doc": "Время создания события"
+    }
+  ]
+}

@@ -23,9 +23,9 @@ services:
     ports:
       - "9001:8000"
     environment:
-      - SECRET_KEY=$(SECRET_KEY)
-      - DATABASE_URL=postgresql://postgres:$(POSTGRES_PASSWORD)@auth_db:5432/authdb
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL_AUTH}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
     depends_on:
       auth_db:
           condition: service_healthy
@@ -44,7 +44,7 @@ services:
     volumes: 
       - postgres_data:/var/lib/postgresql
     environment:
-      - POSTGRES_PASSWORD=$(POSTGRES_PASSWORD)
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=authdb
     
     healthcheck:
@@ -61,9 +61,9 @@ services:
     ports:
       - "9002:8000"
     environment:
-      - SECRET_KEY=$(SECRET_KEY)
-      - DATABASE_URL=postgresql://postgres:$(POSTGRES_PASSWORD_EXPENSES)@expenses_db:5432/expensesdb
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL_EXPENSES}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
     depends_on:
       expenses_db:
           condition: service_healthy
@@ -82,7 +82,7 @@ services:
     volumes: 
       - postgres_data_expenses:/var/lib/postgresql
     environment:
-      - POSTGRES_PASSWORD=$(POSTGRES_PASSWORD_EXPENSES)
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_EXPENSES}
       - POSTGRES_DB=expensesdb
     command: ["postgres", "-c", "wal_level=logical"]
     healthcheck:
@@ -96,8 +96,8 @@ services:
     build: ./event-processor
     restart: unless-stopped
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - DATABASE_URL=postgresql://postgres:$(POSTGRES_PASSWORD_EVENTS)@events_db:5432/eventsdb
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - DATABASE_URL=${DATABASE_URL_EVENTS}
     depends_on:
       kafka:
         condition: service_healthy
@@ -110,7 +110,7 @@ services:
     volumes:
       - postgres_data_events:/var/lib/postgresql
     environment:
-      - POSTGRES_PASSWORD=$(POSTGRES_PASSWORD_EVENTS)
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD_EVENTS}
       - POSTGRES_DB=eventsdb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d eventsdb"]
@@ -125,7 +125,7 @@ services:
     ports:
       - "9004:8000"
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
     depends_on:
       kafka:
         condition: service_healthy
@@ -165,7 +165,7 @@ services:
           condition: service_healthy
 
   connect:
-    image: debezium/connect:2.4
+    image: quay.io/debezium/connect:2.4
     restart: unless-stopped
     ports:
       - "8083:8083"
@@ -175,11 +175,73 @@ services:
       - CONFIG_STORAGE_TOPIC=my_connect_configs
       - OFFSET_STORAGE_TOPIC=my_connect_offsets
       - STATUS_STORAGE_TOPIC=my_connect_statuses
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/connectors"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       kafka:
         condition: service_healthy
       expenses_db:
         condition: service_healthy
+
+  connect-bootstrap:
+    build: ./bootstrap
+    depends_on:
+      connect:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:9092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: debezium
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://connect:8083
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      connect:
+        condition: service_healthy
+
+volumes:
+
+      - .:/config
+    depends_on:
+      connect:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Debezium Connect to be ready..."
+        until curl -s -o /dev/null -w "%{http_code}" http://connect:8083/connectors | grep -q "200"; do
+          sleep 2
+        done
+        echo "Registering connector..."
+        curl -s -X POST -H "Content-Type: application/json" --data @/config/debezium_connector.json http://connect:8083/connectors
+        echo "Done."
 
 volumes:
   postgres_data:

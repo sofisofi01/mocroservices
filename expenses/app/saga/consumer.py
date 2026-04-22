@@ -1,107 +1,61 @@
-import json
 import os
 import threading
-import struct
 from datetime import datetime
-from kafka import KafkaConsumer, KafkaProducer
+from confluent_kafka import Consumer
+from confluent_kafka.schema_registry import SchemaRegistryClient
+from confluent_kafka.schema_registry.avro import AvroDeserializer
+from confluent_kafka.serialization import StringDeserializer
 from saga.events import TOPIC, MONTH_CLOSE_REQUESTED, REPORT_CREATED, MONTH_CLOSE_FAILED
-from schema_registry import schema_client
 
+def get_avro_consumer(topic, group_id):
+    sr_client = SchemaRegistryClient({'url': os.getenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")})
+    avro_deserializer = AvroDeserializer(sr_client)
+    string_deserializer = StringDeserializer('utf_8')
 
-def decode_message(data):
-    """Декодирует сообщение с учетом Schema Registry Wire Protocol"""
-    if len(data) > 5 and data[0] == 0:
-        schema_id = struct.unpack(">I", data[1:5])[0]
-        return json.loads(data[5:].decode("utf-8"))
-    return json.loads(data.decode("utf-8"))
-
-
-def get_producer():
-    return KafkaProducer(
-        bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-    )
-
-
-def validate_expenses(user_id: int, year: int, month: int) -> tuple[bool, str]:
-    from database import db
-    expenses = db.get_all(user_id)
-    month_expenses = [
-        e for e in expenses
-        if e.date.year == year and e.date.month == month
-    ]
-    if not month_expenses:
-        return False, f"No expenses found for {year}-{month:02d}"
-    return True, f"Found {len(month_expenses)} expenses, total: {sum(e.cost * e.quantity for e in month_expenses)}"
-
-
-def create_report(user_id: int, year: int, month: int) -> dict:
-    from database import db
-    expenses = db.get_all(user_id)
-    month_expenses = [
-        e for e in expenses
-        if e.date.year == year and e.date.month == month
-    ]
-    return {
-        "user_id": user_id,
-        "year": year,
-        "month": month,
-        "total": sum(e.cost * e.quantity for e in month_expenses),
-        "count": len(month_expenses),
-        "created_at": datetime.utcnow().isoformat(),
+    consumer_conf = {
+        'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"),
+        'group.id': group_id,
+        'auto.offset.reset': 'earliest'
     }
 
+    consumer = Consumer(consumer_conf)
+    consumer.subscribe([topic])
+    return consumer, avro_deserializer
 
 def run():
-    bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-    producer = get_producer()
+    topic = TOPIC
+    consumer, avro_deserializer = get_avro_consumer(topic, "expenses-saga-group")
 
-    consumer = KafkaConsumer(
-        TOPIC,
-        bootstrap_servers=bootstrap,
-        value_deserializer=decode_message,
-        group_id="expenses-saga-group",
-        auto_offset_reset="earliest",
-    )
+    print(f"Expenses saga consumer started (Avro) on topic {topic}...")
 
-    print("Expenses saga consumer started...")
+    try:
+        while True:
+            msg = consumer.poll(1.0)
+            if msg is None:
+                continue
+            if msg.error():
+                print(f"Consumer error: {msg.error()}")
+                continue
 
-    for message in consumer:
-        event = message.value
-        event_type = event.get("event_type")
+            try:
+                event = avro_deserializer(msg.value(), None)
+                if event is None:
+                    continue
+                
+                event_type = event.get("event_type")
+                if event_type != MONTH_CLOSE_REQUESTED:
+                    continue
 
-        if event_type != MONTH_CLOSE_REQUESTED:
-            continue
+                saga_id = event["saga_id"]
+                user_id = event["user_id"]
+                year = event["year"]
+                month = event["month"]
 
-        saga_id = event["saga_id"]
-        user_id = event["user_id"]
-        year = event["year"]
-        month = event["month"]
-
-        print(f"[SAGA {saga_id}] Received {event_type} for user {user_id}, {year}-{month:02d}")
-
-        ok, message_text = validate_expenses(user_id, year, month)
-
-        if not ok:
-            producer.send(TOPIC, {
-                "event_type": MONTH_CLOSE_FAILED,
-                "saga_id": saga_id,
-                "user_id": user_id,
-                "reason": message_text,
-            })
-            producer.flush()
-            print(f"[SAGA {saga_id}] Failed: {message_text}")
-            continue
-
-        report = create_report(user_id, year, month)
-        producer.send(TOPIC, {
-            "event_type": REPORT_CREATED,
-            "saga_id": saga_id,
-            "user_id": user_id,
-            "report": report,
-        })
-        producer.flush()
-        print(f"[SAGA {saga_id}] Report created: {report}")
+                print(f"[SAGA {saga_id}] Received {event_type} for user {user_id}, {year}-{month:02d}")
+            except Exception as e:
+                print(f"Error decoding message: {e}")
+    finally:
+        consumer.close()
 
 
 def start_saga_consumer():

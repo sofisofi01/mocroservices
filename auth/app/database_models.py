@@ -16,7 +16,8 @@ class Outbox(Base):
     __tablename__ = "outbox"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    topic: Mapped[str] = mapped_column(String(255))
+    aggregate_id: Mapped[str] = mapped_column(String(255))
+    aggregate_type: Mapped[str] = mapped_column(String(255))
+    event_type: Mapped[str] = mapped_column(String(255))
     payload: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    processed: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -1,3 +1,4 @@
+import os
 import json
 from typing import Dict, List, Optional
 from datetime import date, datetime
@@ -16,9 +17,45 @@ class ExpenseItem:
 
 class Database:
     def __init__(self):
-        self.engine = create_engine("sqlite:///expenses.db")
+        db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@expenses_db:5432/expensesdb")
+        self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
+        self._load_initial_fixtures()
+
+    def _load_initial_fixtures(self):
+        db = self.SessionLocal()
+        try:
+            from sqlalchemy import func
+            if db.query(ExpenseModel).count() == 0:
+                expense = ExpenseModel(
+                    title="Initial Coffee", 
+                    cost=5.5, 
+                    quantity=1, 
+                    date=date.today(), 
+                    owner_id=1
+                )
+                db.add(expense)
+                db.flush()
+                
+                self._add_to_outbox(db, 
+                    aggregate_id=str(expense.id),
+                    aggregate_type='expense',
+                    event_type='expense_created',
+                    payload={
+                        'user_id': 1,
+                        'expense_id': expense.id,
+                        'title': "Initial Coffee",
+                        'cost': 5.5
+                    }
+                )
+                db.commit()
+                print("Fixtures: Created initial expense and outbox entry.")
+        except Exception as e:
+            db.rollback()
+            print(f"Fixtures error: {e}")
+        finally:
+            db.close()
         self.expenses: Dict[int, ExpenseItem] = {}
         self.next_id = 1
         self._load_initial_fixtures()
