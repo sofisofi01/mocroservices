@@ -1,6 +1,6 @@
-FROM python:alpine
+FROM python:3.11-slim
 
-RUN apk add --no-cache curl gcc musl-dev librdkafka-dev
+RUN apt-get update && apt-get install -y curl gcc libc6-dev librdkafka-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src/app
 
