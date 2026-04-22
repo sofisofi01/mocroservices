@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y curl gcc libc6-dev librdkafka-dev && rm
 WORKDIR /usr/src/app
 
 COPY app/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir "confluent-kafka[schemaregistry]"
 RUN pip install --no-cache-dir gunicorn "uvicorn[standard]"
 
 COPY app/ .

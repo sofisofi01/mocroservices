@@ -36,12 +36,18 @@ def register_connectors():
         
         if r.status_code == 200:
             print(f"Connector '{name}' exists. Updating configuration...")
-            requests.put(f"{url}/config", json=config, timeout=30).raise_for_status()
-            print(f"Update for '{name}' successful.")
+            update_r = requests.put(f"{url}/config", json=config, timeout=30)
+            if update_r.status_code >= 400:
+                print(f"Failed to update '{name}': {update_r.text}")
+            else:
+                print(f"Update for '{name}' successful.")
         else:
             print(f"Connector '{name}' not found. Creating new one...")
-            requests.post("http://connect:8083/connectors", json=data, timeout=30).raise_for_status()
-            print(f"Creation of '{name}' successful.")
+            create_r = requests.post("http://connect:8083/connectors", json=data, timeout=30)
+            if create_r.status_code >= 400:
+                print(f"Failed to create '{name}': {create_r.text}")
+            else:
+                print(f"Creation of '{name}' successful.")
 
 def register_schemas():
     schemas_dir = Path("schemas")

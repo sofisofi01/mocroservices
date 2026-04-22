@@ -4,4 +4,8 @@ pydantic
 python-jose
 psycopg2-binary
 confluent-kafka
+kafka-python
 fastavro
+certifi
+httpx
+authlib

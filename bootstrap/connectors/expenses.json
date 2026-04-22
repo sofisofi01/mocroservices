@@ -6,7 +6,7 @@
     "database.hostname": "expenses_db",
     "database.port": "5432",
     "database.user": "postgres",
-    "database.password": "postgres",
+    "database.password": "expenses-db-password",
     "database.dbname": "expensesdb",
     "database.server.name": "expenses-service",
     "table.include.list": "public.outbox",
@@ -22,8 +22,7 @@
     "transforms.outbox.route.topic.replacement": "events.${routedByValue}",
     
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
-    "value.converter": "io.confluent.connect.avro.AvroConverter",
-    "value.converter.schema.registry.url": "http://schema-registry:8081",
-    "value.converter.schemas.enable": "true"
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false"
   }
 }

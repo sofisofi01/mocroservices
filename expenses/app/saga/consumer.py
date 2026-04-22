@@ -1,4 +1,5 @@
 import os
+import json
 import threading
 from datetime import datetime
 from confluent_kafka import Consumer
@@ -24,9 +25,18 @@ def get_avro_consumer(topic, group_id):
 
 def run():
     topic = TOPIC
-    consumer, avro_deserializer = get_avro_consumer(topic, "expenses-saga-group")
+    bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
 
-    print(f"Expenses saga consumer started (Avro) on topic {topic}...")
+    conf = {
+        'bootstrap.servers': bootstrap,
+        'group.id': 'expenses-saga-group',
+        'auto.offset.reset': 'earliest'
+    }
+
+    consumer = Consumer(conf)
+    consumer.subscribe([topic])
+
+    print(f"Expenses saga consumer started (JSON) on topic {topic}...")
 
     try:
         while True:
@@ -38,7 +48,7 @@ def run():
                 continue
 
             try:
-                event = avro_deserializer(msg.value(), None)
+                event = json.loads(msg.value().decode('utf-8'))
                 if event is None:
                     continue
                 
@@ -56,6 +66,7 @@ def run():
                 print(f"Error decoding message: {e}")
     finally:
         consumer.close()
+
 
 
 def start_saga_consumer():
