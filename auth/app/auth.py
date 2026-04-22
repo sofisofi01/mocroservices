@@ -34,6 +34,7 @@ def register(user_data: UserRegister):
         aggregate_type='user',
         event_type='user_registered',
         payload={
+            'event_type': 'user_registered',
             'login': user_data.login,
             'user_id': new_user.id
         }
@@ -75,6 +76,7 @@ def login(user_data: UserLogin):
         aggregate_type='user',
         event_type='user_logged_in',
         payload={
+            'event_type': 'user_logged_in',
             'login': user.login,
             'user_id': user.id
         }

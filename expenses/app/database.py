@@ -43,6 +43,7 @@ class Database:
                     aggregate_type='expense',
                     event_type='expense_created',
                     payload={
+                        'event_type': 'expense_created',
                         'user_id': 1,
                         'expense_id': expense.id,
                         'title': "Initial Coffee",
@@ -79,7 +80,7 @@ class Database:
                 aggregate_type='expense',
                 event_type='expense_created',
                 payload={
-                    'user_id': user_id,
+                    'event_type': 'expense_created',
                     'expense_id': expense.id,
                     'title': title,
                     'cost': cost
@@ -109,6 +110,7 @@ class Database:
                     aggregate_type='expense',
                     event_type='expense_updated',
                     payload={
+                        'event_type': 'expense_updated',
                         'user_id': user_id,
                         'expense_id': expense_id,
                         'updated_fields': list(kwargs.keys())
@@ -136,6 +138,7 @@ class Database:
                     aggregate_type='expense',
                     event_type='expense_deleted',
                     payload={
+                        'event_type': 'expense_deleted',
                         'user_id': user_id,
                         'expense_id': expense_id
                     }
