@@ -227,23 +227,6 @@ services:
         condition: service_healthy
 
 volumes:
-
-      - .:/config
-    depends_on:
-      connect:
-        condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        echo "Waiting for Debezium Connect to be ready..."
-        until curl -s -o /dev/null -w "%{http_code}" http://connect:8083/connectors | grep -q "200"; do
-          sleep 2
-        done
-        echo "Registering connector..."
-        curl -s -X POST -H "Content-Type: application/json" --data @/config/debezium_connector.json http://connect:8083/connectors
-        echo "Done."
-
-volumes:
   postgres_data:
   postgres_data_expenses:
   postgres_data_events:
