@@ -84,7 +84,7 @@ services:
     environment:
       - POSTGRES_PASSWORD=$(POSTGRES_PASSWORD_EXPENSES)
       - POSTGRES_DB=expensesdb
-    
+    command: ["postgres", "-c", "wal_level=logical"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d expensesdb"]
       interval: 5s
@@ -163,6 +163,23 @@ services:
           condition: service_healthy
       react: 
           condition: service_healthy
+
+  connect:
+    image: debezium/connect:2.4
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:9092
+      - GROUP_ID=1
+      - CONFIG_STORAGE_TOPIC=my_connect_configs
+      - OFFSET_STORAGE_TOPIC=my_connect_offsets
+      - STATUS_STORAGE_TOPIC=my_connect_statuses
+    depends_on:
+      kafka:
+        condition: service_healthy
+      expenses_db:
+        condition: service_healthy
 
 volumes:
   postgres_data:

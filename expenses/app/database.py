@@ -23,12 +23,13 @@ class Database:
         self.next_id = 1
         self._load_initial_fixtures()
     
-    def _add_to_outbox(self, session, topic: str, payload: dict):
+    def _add_to_outbox(self, session, aggregate_id: str, aggregate_type: str, event_type: str, payload: dict):
         outbox_entry = OutboxModel(
-            topic=topic,
+            aggregate_id=aggregate_id,
+            aggregate_type=aggregate_type,
+            event_type=event_type,
             payload=json.dumps(payload),
-            created_at=datetime.utcnow(),
-            processed=False
+            created_at=datetime.utcnow()
         )
         session.add(outbox_entry)
 
@@ -39,13 +40,17 @@ class Database:
             db.add(expense)
             db.flush()
             
-            self._add_to_outbox(db, 'expense-events', {
-                'event_type': 'expense_created',
-                'user_id': user_id,
-                'expense_id': expense.id,
-                'title': title,
-                'cost': cost
-            })
+            self._add_to_outbox(db, 
+                aggregate_id=str(expense.id),
+                aggregate_type='expense',
+                event_type='expense_created',
+                payload={
+                    'user_id': user_id,
+                    'expense_id': expense.id,
+                    'title': title,
+                    'cost': cost
+                }
+            )
             
             db.commit()
             db.refresh(expense)
@@ -65,12 +70,16 @@ class Database:
                     if hasattr(expense, key) and value is not None:
                         setattr(expense, key, value)
                 
-                self._add_to_outbox(db, 'expense-events', {
-                    'event_type': 'expense_updated',
-                    'user_id': user_id,
-                    'expense_id': expense_id,
-                    'updated_fields': list(kwargs.keys())
-                })
+                self._add_to_outbox(db,
+                    aggregate_id=str(expense_id),
+                    aggregate_type='expense',
+                    event_type='expense_updated',
+                    payload={
+                        'user_id': user_id,
+                        'expense_id': expense_id,
+                        'updated_fields': list(kwargs.keys())
+                    }
+                )
                 
                 db.commit()
                 db.refresh(expense)
@@ -88,11 +97,15 @@ class Database:
             if expense:
                 db.delete(expense)
                 
-                self._add_to_outbox(db, 'expense-events', {
-                    'event_type': 'expense_deleted',
-                    'user_id': user_id,
-                    'expense_id': expense_id
-                })
+                self._add_to_outbox(db,
+                    aggregate_id=str(expense_id),
+                    aggregate_type='expense',
+                    event_type='expense_deleted',
+                    payload={
+                        'user_id': user_id,
+                        'expense_id': expense_id
+                    }
+                )
                 
                 db.commit()
                 return True
@@ -103,19 +116,6 @@ class Database:
         finally:
             db.close()
 
-    def get_pending_outbox(self) -> List[OutboxModel]:
-        db = self.SessionLocal()
-        messages = db.query(OutboxModel).filter(OutboxModel.processed == False).all()
-        db.close()
-        return messages
-
-    def mark_as_processed(self, message_id: int):
-        db = self.SessionLocal()
-        message = db.query(OutboxModel).filter(OutboxModel.id == message_id).first()
-        if message:
-            message.processed = True
-            db.commit()
-        db.close()
 
 
 db = Database()
