@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional, Dict, Union, Any
-from http import HTTPStatus
 from datetime import date
 from math import ceil
 from database import db
@@ -20,7 +19,7 @@ def get_current_user(token: str = Depends(security)) -> int:
         try:
             return int(sub)
         except (ValueError, TypeError):
-            # Если в токене логин (строка), возвращаем 1 для теста
+            #HACK для теста отключила авторизацию
             return 1
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -33,10 +32,6 @@ def expense_to_dict(expense) -> dict:
         "quantity": expense.quantity,
         "date": expense.date.isoformat()
     }
-
-@router.get("/health", status_code = HTTPStatus.OK)
-def health():
-    return {"status": "ok"}
 
 @router.get("/expenses/")
 def get_expenses(

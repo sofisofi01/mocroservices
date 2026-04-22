@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
-from http import HTTPStatus
 from models import UserRegister, TokenOut, UserLogin
 from database_models import User
 from database import db
@@ -8,11 +7,6 @@ from crypt import CryptService
 from kafka_producer import KafkaService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-@router.get("/health", status_code = HTTPStatus.OK)
-def health():
-    return {"status": "ok"}
 
 
 @router.post("/register", response_model=TokenOut)

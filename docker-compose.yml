@@ -5,6 +5,7 @@ services:
       - "9092:9092"
     environment:
       KAFKA_NODE_ID: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
       KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
       KAFKA_JMX_PORT: 9101
@@ -23,6 +24,19 @@ services:
       timeout: 10s
       retries: 5
 
+  kafka-topics-init:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: |
+      bash -c "
+      echo 'Waiting for Kafka to be fully ready...';
+      sleep 5;
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic events.saga --partitions 3 --replication-factor 1;
+      echo 'Topic events.saga created!';
+      "
+
   auth:
     build: ./auth
     restart: unless-stopped
@@ -38,6 +52,8 @@ services:
           condition: service_healthy
       kafka:
           condition: service_healthy
+      kafka-topics-init:
+          condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/auth/health"]
       interval: 5s
@@ -61,7 +77,6 @@ services:
       retries: 10
       start_period: 5s
 
-
   expenses:
     build: ./expenses
     restart: unless-stopped
@@ -77,6 +92,8 @@ services:
           condition: service_healthy
       kafka:
           condition: service_healthy
+      kafka-topics-init:
+          condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health"]
       interval: 5s
@@ -111,6 +128,8 @@ services:
         condition: service_healthy
       events_db:
         condition: service_healthy
+      kafka-topics-init:
+        condition: service_completed_successfully
 
   events_db:
     image: postgres
