@@ -56,9 +56,6 @@ class Database:
             print(f"Fixtures error: {e}")
         finally:
             db.close()
-        self.expenses: Dict[int, ExpenseItem] = {}
-        self.next_id = 1
-        self._load_initial_fixtures()
     
     def _add_to_outbox(self, session, aggregate_id: str, aggregate_type: str, event_type: str, payload: dict):
         outbox_entry = OutboxModel(

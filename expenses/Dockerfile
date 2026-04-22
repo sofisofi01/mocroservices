@@ -11,10 +11,3 @@ RUN pip install --no-cache-dir gunicorn "uvicorn[standard]"
 COPY app/ .
 
 CMD ["gunicorn", "main:app", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
-"
-
-COPY app/*.py ./
-
-EXPOSE 8000
-
-CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "1", "main:app"]
